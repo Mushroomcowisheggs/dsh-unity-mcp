@@ -1,0 +1,7 @@
+# dsh-unity-mcp bundle: registers the Unity MCP bridge plugin.
+# Applied when a profile lists this bundle. Loads lib/index.js, which mounts
+# @deepseek-ai/dsh-mcp-client against the vendored mcp-unity server.
+- insert:
+    - id: unity-mcp
+      name: dsh-unity-mcp
+      config: {}
