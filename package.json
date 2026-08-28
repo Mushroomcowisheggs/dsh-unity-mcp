@@ -6,6 +6,17 @@
   "type": "module",
   "license": "MIT",
   "author": "dsh-unity-mcp contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thyeff/dsh-unity-mcp.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "smoke": "node scripts/smoke.mjs vendor",
+    "smoke:install": "node scripts/smoke.mjs"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
@@ -39,6 +50,7 @@
     "vendor",
     "cordis.patch.yml",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ]
 }
