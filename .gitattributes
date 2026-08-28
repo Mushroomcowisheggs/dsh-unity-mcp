@@ -1,0 +1,7 @@
+# Keep LF line endings for script/config files across platforms
+*.mjs text eol=lf
+*.js text eol=lf
+*.json text
+*.md text
+*.yml text eol=lf
+*.yaml text eol=lf
