@@ -86,6 +86,20 @@ A：让 Agent 调用 `mcp__unity__get_scenes_hierarchy`；若返回了真实的�
 **Q：与手动配置 `@deepseek-ai/dsh-mcp-client` 有何区别？**
 A：效果相同。区别在于本插件内置服务端与默认配置，免去手写 patch；**注意不要同时保留手动配置的同名 `serverName`（unity）条目，否则插件加载会报命名空间冲突**——二选一即可。
 
+## 开发与测试（Development & testing）
+
+仓库自带烟雾测试：对安装副本（或源码 vendor）发起真实 stdio 握手，列出注册的 Unity 工具，用于快速验证服务端可用性与工具完整性。
+
+```bash
+# 基于源码 vendor 测试（不依赖已安装副本）
+node scripts/smoke.mjs vendor
+
+# 基于 DSH 中的安装副本测试（先确认已安装本插件）
+node scripts/smoke.mjs
+```
+
+仓库 CI（`.github/workflows/ci.yml`）会校验 package.json、bundle 补丁、入口语法与打包内容。源码结构、升级内置服务端的方法见 [CONTRIBUTING.md](./CONTRIBUTING.md)，变更记录见 [CHANGELOG.md](./CHANGELOG.md)。
+
 ## 工具清单（部分）
 
 | 类别 | 工具示例 |
