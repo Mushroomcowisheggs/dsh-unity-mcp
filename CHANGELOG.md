@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Bundled vendored [mcp-unity](https://github.com/CoderGamester/mcp-unity) server (MIT)
+- Bundled vendored [mcp-unity](https://github.com/CoderGamester/mcp-unity) 1.4.0 server (MIT)
   under `vendor/mcp-unity-server/`.
 - Automatic registration of a `unity`-namespaced MCP client via
   `@deepseek-ai/dsh-mcp-client`, mounted through a `dsh.bundle` patch — install the

@@ -4,7 +4,7 @@
 
 让 DeepSeek Harness（DSH / DeepSeek 桌面助手）里的 AI Agent **直接操控 Unity 编辑器**：一键安装本插件后，Agent 即可获得 30+ 个 Unity 工具，覆盖游戏开发全流程。
 
-本插件是 [CoderGamester/mcp-unity](https://github.com/CoderGamester/mcp-unity)（MIT）在 DeepSeek Harness 上的封装：内置 mcp-unity 服务端，安装即用，无需手动编辑 `cordis.patch.yml`。
+本插件是 [CoderGamester/mcp-unity](https://github.com/CoderGamester/mcp-unity)（MIT）在 DeepSeek Harness 上的封装：内置 mcp-unity **1.4.0** 服务端，安装即用，无需手动编辑 `cordis.patch.yml`。
 
 ## 功能特性
 
