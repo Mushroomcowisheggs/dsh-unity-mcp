@@ -1,10 +1,27 @@
 # dsh-unity-mcp
 
-简体中文文档
+> **让 DSH 里的 AI Agent 直接操控 Unity 编辑器** —— 安装即用，34 个工具覆盖游戏开发全流程。
+> One-shot integration that gives DSH agents direct control over the Unity Editor.
+
+简体中文文档 · [功能特性](#功能特性) · [安装](#安装) · [进阶玩法](#进阶与-dsh-mcp-lens-渐进披露搭配省-token) · [常见问题](#常见问题faq)
 
 让 DeepSeek Harness（DSH）里的 AI Agent **直接操控 Unity 编辑器**：一键安装本插件后，Agent 即可获得 34 个 Unity 工具，覆盖游戏开发全流程。
 
 本插件是 [CoderGamester/mcp-unity](https://github.com/CoderGamester/mcp-unity)（MIT）在 DeepSeek Harness 上的封装：内置 mcp-unity **1.4.0** 服务端，安装即用，无需手动编辑 `cordis.patch.yml`。
+
+## 工作原理
+
+```
+DSH Agent ──MCP(stdio)──> dsh-unity-mcp ──> 内置 mcp-unity 服务端 ──TCP :8090──> Unity 网桥包（编辑器进程内）
+```
+
+DSH 侧安装本插件、Unity 侧在项目里安装网桥包（`com.gamelovers.mcp-unity`），中间链路全部自动建立，无需手动配置。
+
+## 三步上手（TL;DR）
+
+1. `dsh plugin --profile web add git+https://github.com/thyeff/dsh-unity-mcp.git`
+2. Unity 项目的 `Packages/manifest.json` 加入网桥包（详见[安装](#安装)）
+3. 打开 Unity 编辑器，对 Agent 说：「查看当前场景层级」
 
 ## 功能特性
 
