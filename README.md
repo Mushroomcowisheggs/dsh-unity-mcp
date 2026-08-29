@@ -28,7 +28,7 @@
 ### 第 1 步：安装 DSH 插件
 
 ```bash
-dsh plugin install <你的GitHub用户名>/dsh-unity-mcp --profile web
+dsh plugin --profile web add git+https://github.com/thyeff/dsh-unity-mcp.git
 ```
 
 或在 DSH 网页的插件市场（若已收录）中搜索 `dsh-unity-mcp` 安装。
@@ -58,19 +58,48 @@ dsh plugin install <你的GitHub用户名>/dsh-unity-mcp --profile web
 
 ## 可选配置
 
-在 profile 的 `cordis.patch.yml` 中可覆写本插件行为（一般无需配置）：
+在 profile 的 `cordis.patch.yml` 中可覆写本插件行为（一般无需配置）。本插件以 `id: unity-mcp` 插入，patch 需按 id 匹配：
 
 ```yaml
-patches:
-  - name: dsh-unity-mcp
-    config:
-      serverName: unity          # MCP 工具命名空间，默认 unity
-      toolCallTimeoutMs: 60000   # 单次工具调用超时，默认 60 秒
-      env: {}                    # 传给服务端进程的额外环境变量
-      reconnect:                 # 重连策略（默认指数退避，1s 起、30s 封顶、10 次）
-        enabled: true
-        maxAttempts: 10
+- id: unity-mcp
+  config:
+    serverName: unity          # MCP 工具命名空间，默认 unity
+    toolCallTimeoutMs: 60000   # 单次工具调用超时，默认 60 秒
+    env:                       # 传给服务端进程的额外环境变量
+      MCP_UNITY_PORT: '8090'   # 自定义 Unity 网桥端口（默认 8090）
+    reconnect:                 # 重连策略（默认指数退避，1s 起、30s 封顶、10 次）
+      enabled: true
+      maxAttempts: 10
 ```
+
+> patch 是 profile 的 `cordis.patch.yml` 顶层列表（不要包在 `patches:` 里）；示例中的 `serverName` 等均可省略，省略即用默认值。
+
+## 进阶：与 dsh-mcp-lens 渐进披露搭配（省 token）
+
+默认安装后，34 个 Unity 工具会以 `mcp__unity__*` 常驻在每个请求的工具清单里——方便，但对 token 敏感的长对话是一笔持续的「常驻税」。
+
+如果在意成本，可以用渐进披露 MCP 网关 **dsh-mcp-lens**（`mcp_search` / `mcp_call` 两个工具）接管 unity 服务端：模型面从 34 个工具收敛到 2 个，**用到才披露精确 schema**（约省 95% 的相关 schema 字节）。此时**不再安装本插件作为 bundle**（避免与 mcp-lens 双重注册同名工具），仅把本仓库的 vendored 服务端作为依赖保留：
+
+```yaml
+# profile 的 cordis.patch.yml
+- id: mcp-lens
+  config:
+    servers:
+      - name: unity
+        transport: stdio
+        command: <DSH 自带 node 的可执行路径，如 D:\...\resources\app\node_modules\node\bin\node.exe>
+        args:
+          - <本插件 vendored 服务端路径：.../node_modules/dsh-unity-mcp/vendor/mcp-unity-server/build/index.js>
+        env:
+          ELECTRON_RUN_AS_NODE: '1'
+    cachePath: !!js dshHomePath('mcp-lens/catalog.json')
+    allowTools:
+      - 'unity/*'
+```
+
+两种方式二选一：
+- **直连（本插件默认）**：零配置、工具即用，适合不在乎 token 或 Unity 工具用得频繁的场景
+- **渐进披露（mcp-lens）**：常驻 2 工具，适合长对话/多 MCP server、Unity 工具低频使用的场景
 
 ## 常见问题（FAQ）
 
