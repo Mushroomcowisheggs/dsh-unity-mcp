@@ -1,19 +1,19 @@
 # dsh-unity-mcp
 
-[中文](#简介) | 简体中文文档
+简体中文文档
 
-让 DeepSeek Harness（DSH / DeepSeek 桌面助手）里的 AI Agent **直接操控 Unity 编辑器**：一键安装本插件后，Agent 即可获得 30+ 个 Unity 工具，覆盖游戏开发全流程。
+让 DeepSeek Harness（DSH）里的 AI Agent **直接操控 Unity 编辑器**：一键安装本插件后，Agent 即可获得 34 个 Unity 工具，覆盖游戏开发全流程。
 
 本插件是 [CoderGamester/mcp-unity](https://github.com/CoderGamester/mcp-unity)（MIT）在 DeepSeek Harness 上的封装：内置 mcp-unity **1.4.0** 服务端，安装即用，无需手动编辑 `cordis.patch.yml`。
 
 ## 功能特性
 
 - **零配置接入**：安装插件即自动注册 MCP 服务端，无需手写任何配置
-- **30+ Unity 工具**：场景管理、GameObject 增删改查、组件/材质操作、Prefab、菜单执行、测试运行、控制台日志读取等
+- **34 个 Unity 工具**：场景管理、GameObject 增删改查、组件/材质操作、Prefab、菜单执行、测试运行、控制台日志读取等
 - **自动重连**：Unity 编辑器重启后自动恢复连接（指数退避，最多 10 次）
 - **中文文档**：本 README 即完整使用说明
 
-工具命名空间为 `unity`，Agent 内调用形如 `mcp__unity__create_scene`、`mcp__unity__update_game_object` 等。
+工具命名空间为 `unity`，Agent 内调用形如 `mcp__unity__create_scene`、`mcp__unity__update_gameobject` 等。
 
 ## 环境要求
 
@@ -134,11 +134,11 @@ node scripts/smoke.mjs
 | 类别 | 工具示例 |
 |------|---------|
 | 场景 | create_scene / load_scene / save_scene / get_scenes_hierarchy |
-| GameObject | update_game_object / execute_menu_item / select_game_object |
+| GameObject | update_gameobject / select_gameobject / move_gameobject |
 | 资产 | add_asset_to_scene / create_prefab / update_component |
 | 质量 | run_tests / get_console_logs / send_console_log |
 
-完整 30+ 工具以运行时注册为准，可在会话中问 Agent：「列出所有 unity 工具」。
+完整 34 个工具以运行时注册为准，可在会话中问 Agent：「列出所有 unity 工具」。
 
 ## 许可证
 
