@@ -27,10 +27,12 @@ DSH 侧安装本插件、Unity 侧在项目里安装网桥包（`com.gamelovers.
 
 - **零配置接入**：安装插件即自动注册 MCP 服务端，无需手写任何配置
 - **34 个 Unity 工具**：场景管理、GameObject 增删改查、组件/材质操作、Prefab、菜单执行、测试运行、控制台日志读取等
+- **网桥诊断（v1.1）**：本地工具 `unity_status` 先探后调——TCP 探测 Unity 网桥是否在线，Unity 未启动时 Agent 秒级知道，不再干等 60 秒超时
+- **配置校验（v1.1）**：超时等数值配置带 schema 校验，非法值在加载期直接报错，不会悄悄注销工具
 - **自动重连**：Unity 编辑器重启后自动恢复连接（指数退避，最多 10 次）
 - **中文文档**：本 README 即完整使用说明
 
-工具命名空间为 `unity`，Agent 内调用形如 `mcp__unity__create_scene`、`mcp__unity__update_gameobject` 等。
+工具命名空间为 `unity`，Agent 内调用形如 `mcp__unity__create_scene`、`mcp__unity__update_gameobject` 等；另有本地诊断工具 `unity_status`（不带 mcp__ 前缀）。
 
 ## 环境要求
 
@@ -69,9 +71,9 @@ dsh plugin --profile web add git+https://github.com/thyeff/dsh-unity-mcp.git
 1. 确保 Unity 编辑器已打开且加载了项目（网桥运行在编辑器进程内，监听 **8090** 端口）
 2. 在 DSH 中新建会话，对 Agent 说：
 
-   > 查看当前 Unity 场景的层级结构
+   > 先检查 Unity 网桥状态，再看当前场景层级
 
-   Agent 调用 `mcp__unity__get_scenes_hierarchy` 并返回场景树即为接入成功。
+   Agent 先调 `unity_status`（网桥可达即接入成功），再调 `mcp__unity__get_scenes_hierarchy` 返回场景树。
 
 ## 可选配置
 
@@ -81,13 +83,17 @@ dsh plugin --profile web add git+https://github.com/thyeff/dsh-unity-mcp.git
 - id: unity-mcp
   config:
     serverName: unity          # MCP 工具命名空间，默认 unity
-    toolCallTimeoutMs: 60000   # 单次工具调用超时，默认 60 秒
+    toolCallTimeoutMs: 60000   # 单次工具调用超时，默认 60 秒（必须 > 0）
+    probeTimeoutMs: 2000       # unity_status 探测网桥的超时，默认 2 秒（必须 ≥ 100）
     env:                       # 传给服务端进程的额外环境变量
-      MCP_UNITY_PORT: '8090'   # 自定义 Unity 网桥端口（默认 8090）
+      UNITY_PORT: '8090'       # 自定义 Unity 网桥端口（默认 8090，unity_status 同步探测此端口）
+      UNITY_HOST: 'localhost'  # 自定义网桥地址（默认 localhost）
     reconnect:                 # 重连策略（默认指数退避，1s 起、30s 封顶、10 次）
       enabled: true
       maxAttempts: 10
 ```
+
+非法值（如 `toolCallTimeoutMs: 0`）会在插件加载期被 schema 直接拒绝并报错，而不是让工具静默失效。
 
 > patch 是 profile 的 `cordis.patch.yml` 顶层列表（不要包在 `patches:` 里）；示例中的 `serverName` 等均可省略，省略即用默认值。
 
@@ -121,10 +127,10 @@ dsh plugin --profile web add git+https://github.com/thyeff/dsh-unity-mcp.git
 ## 常见问题（FAQ）
 
 **Q：工具调用报错「连接失败 / ECONNREFUSED」？**
-A：Unity 编辑器没有打开，或项目未安装网桥包。网桥跑在编辑器进程里——**调用任何 Unity 工具前必须先打开 Unity 编辑器并加载项目**。
+A：Unity 编辑器没有打开，或项目未安装网桥包。网桥跑在编辑器进程里——**调用任何 Unity 工具前必须先打开 Unity 编辑器并加载项目**。让 Agent 先调 `unity_status` 探测，网桥不可达时它会直接告诉你原因，不必靠超时试错。
 
 **Q：8090 端口被占用？**
-A：关闭占用进程，或在 Unity 网桥设置中更换端口后，通过上面 `cordis.patch.yml` 的 `env` 传 `MCP_UNITY_PORT` 对应端口（以 mcp-unity 上游文档为准）。
+A：关闭占用进程，或在 Unity 网桥设置中更换端口后，通过上面 `cordis.patch.yml` 的 `env` 传 `UNITY_PORT` 对应端口（`unity_status` 会同步探测该端口；服务端亦会读 Unity 项目的 `ProjectSettings/McpUnitySettings.json`，以 mcp-unity 上游文档为准）。
 
 **Q：如何确认 Agent 真的连上了 Unity？**
 A：让 Agent 调用 `mcp__unity__get_scenes_hierarchy`；若返回了真实的场景层级（Main Camera 等）即连通。

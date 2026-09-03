@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 （暂无计划项）
 
+## [1.1.0] - 2026-09-03
+
+### Added
+
+- Local diagnostic tool `unity_status`: TCP-probes the Unity bridge (host/port
+  resolved from `UNITY_HOST`/`UNITY_PORT` env, default `localhost:8090`) before
+  the agent calls any `mcp__unity__*` tool, so a closed Unity editor is detected
+  in ~2 s instead of a 60 s tool-call timeout. Returns structured status with
+  latency and an actionable hint; probe timeout configurable via `probeTimeoutMs`.
+- Config schema (`Config` via `@deepseek-ai/schemastery`): `toolCallTimeoutMs`,
+  `probeTimeoutMs`, and reconnect timing/attempts are validated at load time —
+  invalid values (e.g. non-positive timeouts) fail loudly instead of silently
+  unregistering tools.
+
+### Fixed
+
+- README documented the bridge port env var as `MCP_UNITY_PORT`; the vendored
+  mcp-unity server actually reads `UNITY_PORT` (and `UNITY_HOST`). Docs and
+  examples corrected (v1.0.0).
+
 ## [1.0.0] - 2026-08-28
 
 ### Added
