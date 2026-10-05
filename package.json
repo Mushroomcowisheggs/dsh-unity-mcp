@@ -1,6 +1,6 @@
 {
   "name": "dsh-unity-mcp",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "DeepSeek Harness 插件：一键接入 mcp-unity，让 Agent 直接操控 Unity 编辑器进行游戏开发（场景/物体/材质/测试等 30+ 工具，附带 unity_status 网桥诊断）",
   "main": "lib/index.js",
   "type": "module",
@@ -14,6 +14,8 @@
     "node": ">=18.0.0"
   },
   "scripts": {
+    "test": "node --test test/",
+    "bridge-check": "node scripts/bridge-check.mjs",
     "smoke": "node scripts/smoke.mjs vendor",
     "smoke:install": "node scripts/smoke.mjs"
   },
@@ -52,6 +54,8 @@
   "files": [
     "lib",
     "vendor",
+    "scripts",
+    "docs",
     "cordis.patch.yml",
     "README.md",
     "CHANGELOG.md",

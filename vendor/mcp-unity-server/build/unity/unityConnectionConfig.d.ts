@@ -11,6 +11,10 @@ export interface ResolvedUnityConnectionConfig {
     host: string;
     port: number;
     requestTimeout: number;
+    /** Bridge authentication token (empty when the bridge does not use authentication). */
+    authToken: string;
+    /** Where the token came from: an env var, the Unity project, or `none`. */
+    authTokenSource: string;
     settingsPath?: string;
 }
 /**

@@ -34,6 +34,8 @@ export interface UnityConnectionConfig {
     host: string;
     port: number;
     requestTimeout: number;
+    /** Bridge authentication token (empty string connects without authentication). */
+    authToken?: string;
     connectTimeout?: number;
     clientName?: string;
     minReconnectDelay?: number;

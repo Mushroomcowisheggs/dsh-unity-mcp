@@ -153,14 +153,20 @@ export class UnityConnection extends EventEmitter {
         const isReconnecting = this.reconnectAttempt > 0;
         this.setState(isReconnecting ? ConnectionState.Reconnecting : ConnectionState.Connecting, isReconnecting ? `Reconnection attempt ${this.reconnectAttempt}` : 'Connecting');
         return new Promise((resolve, reject) => {
+            let terminalAuthenticationFailure = null;
             const wsUrl = `ws://${this.config.host}:${this.config.port}/McpUnity`;
             this.logger.debug(`Connecting to ${wsUrl}...`);
             // Create connection options with headers for client identification
-            const options = {
-                headers: {
-                    'X-Client-Name': this.config.clientName || ''
-                }
+            const headers = {
+                'X-Client-Name': this.config.clientName || ''
             };
+            // Unity bridges with authentication expect HTTP Basic credentials:
+            // username "mcp-unity" and the per-project token. Never log the header.
+            if (this.config.authToken) {
+                headers['Authorization'] =
+                    `Basic ${Buffer.from(`mcp-unity:${this.config.authToken}`, 'utf8').toString('base64')}`;
+            }
+            const options = { headers };
             // Clean up existing socket first
             this.closeWebSocket('Preparing new connection');
             // Create new WebSocket
@@ -188,6 +194,9 @@ export class UnityConnection extends EventEmitter {
                 resolve();
             };
             this.ws.onerror = (err) => {
+                if (terminalAuthenticationFailure) {
+                    return;
+                }
                 this.clearConnectionTimeout();
                 const errorMessage = err.message || 'Unknown error';
                 this.logger.error(`WebSocket error: ${errorMessage}`);
@@ -210,6 +219,11 @@ export class UnityConnection extends EventEmitter {
                 }
                 // Clear WebSocket reference
                 this.ws = null;
+                // An authentication rejection is terminal: the token will not
+                // become valid by retrying, so never start a reconnect storm.
+                if (terminalAuthenticationFailure) {
+                    return;
+                }
                 // Handle reconnection if not manual disconnect
                 if (!this.isManualDisconnect) {
                     this.handleConnectionFailure(new McpUnityError(ErrorType.CONNECTION, reason));
@@ -226,12 +240,39 @@ export class UnityConnection extends EventEmitter {
             this.ws.on('pong', () => {
                 this.handlePong();
             });
+            // A rejected Basic handshake answers 401/403 instead of upgrading.
+            // Without this handler the failure degrades into the generic
+            // "Max reconnection attempts reached" / request-timeout symptoms.
+            this.ws.on('unexpected-response', (_request, response) => {
+                if (response.statusCode !== 401 && response.statusCode !== 403) {
+                    return;
+                }
+                const error = new McpUnityError(ErrorType.AUTHENTICATION, `Unity rejected the bridge authentication (HTTP ${response.statusCode}). ` +
+                    'Check the project token (Tools > MCP Unity > Server Window) and set MCP_UNITY_AUTH_TOKEN_PATH ' +
+                    'or MCP_UNITY_AUTH_TOKEN, then restart the MCP client.');
+                terminalAuthenticationFailure = error;
+                this.clearConnectionTimeout();
+                this.stopHeartbeat();
+                this.ws?.terminate();
+                this.handleConnectionFailure(error);
+                reject(error);
+            });
         });
     }
     /**
      * Handle connection failure and schedule reconnection
      */
     handleConnectionFailure(error) {
+        // Authentication failures are terminal: retrying with the same
+        // credentials cannot succeed, so stop reconnecting and let the caller
+        // surface the real cause instead of a reconnect/timeout symptom.
+        if (error.type === ErrorType.AUTHENTICATION) {
+            this.isManualDisconnect = true;
+            this.stopReconnectTimer();
+            this.setState(ConnectionState.Disconnected, error.message);
+            this.emit('error', error);
+            return;
+        }
         if (this.isManualDisconnect) {
             this.setState(ConnectionState.Disconnected, 'Manual disconnect');
             return;
