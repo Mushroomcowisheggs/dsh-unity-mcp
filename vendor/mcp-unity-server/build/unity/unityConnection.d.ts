@@ -28,6 +28,19 @@ export interface ConnectionStateChange {
     attemptNumber?: number;
 }
 /**
+ * One connection target: a Unity project's bridge endpoint and credentials.
+ * A bridge serves exactly one project, so walking these candidates identifies
+ * the live project (the first one whose handshake is accepted).
+ */
+export interface UnityConnectionCandidate {
+    host: string;
+    port: number;
+    authToken?: string;
+    /** Diagnostic label (project root or env source); never contains the token. */
+    source?: string;
+    projectRoot?: string;
+}
+/**
  * Configuration for the Unity connection
  */
 export interface UnityConnectionConfig {
@@ -36,6 +49,8 @@ export interface UnityConnectionConfig {
     requestTimeout: number;
     /** Bridge authentication token (empty string connects without authentication). */
     authToken?: string;
+    /** Candidate targets tried in order while no project has been identified yet. */
+    candidates?: UnityConnectionCandidate[];
     connectTimeout?: number;
     clientName?: string;
     minReconnectDelay?: number;
@@ -69,6 +84,12 @@ export declare class UnityConnection extends EventEmitter {
     private heartbeatTimeoutTimer;
     private lastPongTime;
     private awaitingPong;
+    private candidateIndex;
+    private pinnedCandidate;
+    private sweepExhausted;
+    private lastConnectErrorCode;
+    private suppressCloseHandling;
+    private inCloseHandler;
     constructor(logger: Logger, config: UnityConnectionConfig);
     /**
      * Get the current connection state

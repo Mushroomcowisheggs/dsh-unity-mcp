@@ -7,7 +7,7 @@
 
 让 DeepSeek Harness（DSH）里的 AI Agent **直接操控 Unity 编辑器**：一键安装本插件后，Agent 即可获得 34 个 Unity 工具，覆盖游戏开发全流程。
 
-本插件是 [CoderGamester/mcp-unity](https://github.com/CoderGamester/mcp-unity)（MIT）在 DeepSeek Harness 上的封装：内置 mcp-unity **1.4.0** 服务端（并**定向移植了 1.5.0 的网桥认证**，见[认证与 Unity 项目定位](#认证与-unity-项目定位v13)），安装即用，无需手动编辑 `cordis.patch.yml`。
+本插件是 [CoderGamester/mcp-unity](https://github.com/CoderGamester/mcp-unity)（MIT）在 DeepSeek Harness 上的封装：内置 mcp-unity **1.4.0** 服务端（并**定向移植了 1.5.0 的网桥认证**，见[认证与活跃项目识别](#认证与活跃项目识别v14)），安装即用，无需手动编辑 `cordis.patch.yml`。
 
 ## 工作原理
 
@@ -27,8 +27,9 @@ DSH 侧安装本插件、Unity 侧在项目里安装网桥包（`com.gamelovers.
 
 - **零配置接入**：安装插件即自动注册 MCP 服务端，无需手写任何配置
 - **34 个 Unity 工具**：场景管理、GameObject 增删改查、组件/材质操作、Prefab、菜单执行、测试运行、控制台日志读取等
-- **认证握手（v1.3）**：Unity 1.5+ 网桥要求 HTTP Basic 认证（项目 token）；插件会自动定位 Unity 项目并带上 `Authorization` 头，token 缺失时给出明确报错而不是无限重连
-- **网桥诊断（v1.1，v1.3 升级为真握手）**：本地工具 `unity_status` 先探后调——TCP 探测 + **真实 WebSocket 认证握手**；Unity 未启动、端口被占用、认证被拒都能秒级分辨，不再干等 60 秒超时
+- **认证握手（v1.3）**：Unity 1.5+ 网桥要求 HTTP Basic 认证（项目 token）；客户端带上 `Authorization` 头，认证失败立即报明确原因而不是无限重连
+- **活跃项目识别（v1.4）**：不依赖工作目录——汇集 DSH 工作区登记表/会话目录/寻根/同级扫描得到的候选项目，逐个用其 token 真实握手，**第一个被接受的就是当前打开的项目**；换项目无需改配置
+- **网桥诊断（v1.1，v1.3 升级为真握手）**：本地工具 `unity_status` 先探后调——TCP 探测 + **真实 WebSocket 认证握手**，并回报识别出的项目；Unity 未启动、端口被占用、认证被拒都能秒级分辨，不再干等 60 秒超时
 - **配置校验（v1.1）**：超时等数值配置带 schema 校验，非法值在加载期直接报错，不会悄悄注销工具
 - **自动重连**：Unity 编辑器重启后自动恢复连接（指数退避，最多 10 次）；认证失败属终态错误，不会重连刷屏
 - **兼容 DSH 0.2（v1.2）**：放宽 DSH 核心包的 peer 版本范围，0.1.x 与 0.2.0-rc.2 均免豁免直接加载
@@ -83,46 +84,55 @@ dsh plugin --profile web add git+https://github.com/Mushroomcowisheggs/dsh-unity
    Agent 先调 `unity_status`：`handshake=connected`（TCP 可达 + 认证握手成功）才代表工具就绪；
    再调 `mcp__unity__get_scenes_hierarchy` 返回场景树。
 
-> **Unity 1.5+ 需要 bridge token**：网桥从 1.5.0 起要求 HTTP Basic 认证
-> （用户名 `mcp-unity`，密码是项目 token `<项目>/Library/McpUnity/bridge-token`）。
-> 本插件会自动定位 Unity 项目并注入该 token；定位不到时 `unity_status` 会报
-> `handshake=unauthorized` 并提示如何配置，见下方[认证与 Unity 项目定位](#认证与-unity-项目定位v13)。
+> **Unity 1.5+ 需要 bridge token，且一般不需要你配置**：网桥从 1.5.0 起要求 HTTP Basic
+> 认证（用户名 `mcp-unity`，密码是项目 token `<项目>/Library/McpUnity/bridge-token`）。
+> 插件会汇集多个来源的候选 Unity 项目，逐个用其 token 做真实握手，**第一个被接受的就是
+> 当前打开的项目**——换项目无需改任何配置。详见
+> [认证与活跃项目识别](#认证与活跃项目识别v14)。
 
-## 认证与 Unity 项目定位（v1.3）
+## 认证与活跃项目识别（v1.4）
 
 Unity 侧网桥（`com.gamelovers.mcp-unity` **1.5.0 及以上**）在 WebSocket 握手阶段校验 HTTP
 Basic 认证：用户名固定 `mcp-unity`，密码是每个项目独有的 64 位十六进制 token，存放在
 `<Unity 项目根>/Library/McpUnity/bridge-token`（`Library/` 通常不进版本控制，因此每个项目
-各自一份）。缺 token 时网桥回 `401 Unauthorized` 并断开，客户端会一直重连直到放弃——
-表现为「工具全部失败、且报超时」，所以**认证必须先解决**。
+各自一份）。缺 token 时网桥回 `401 Unauthorized` 并断开。
 
-插件按下面的顺序定位 token（前一步命中即不再往下）：
+难点不在「发认证头」，而在**知道当前开的是哪个项目**：DSH 是常驻服务 + 全局 profile，
+服务端进程的工作目录不在任何 Unity 项目内，单靠 `cwd` 向上找项目必然失败。而同一个端口上
+同时只有一个网桥在监听——所以活跃项目可以被**识别**，不必被**配置**：
 
-1. `config.env.MCP_UNITY_AUTH_TOKEN` —— 直接给 token（优先级最高，适合 CI/临时排查）
-2. `config.env.MCP_UNITY_AUTH_TOKEN_PATH` —— 指向 token 文件
-3. `config.unityProjectPath`（或从工作目录向上自动探测到的 Unity 项目）下的
-   `Library/McpUnity/bridge-token`
+1. **汇集候选项目**（按优先级）：`unityProjectPath` / `unityProjectSearchPaths` →
+   DSH 工作区登记表 `$DSH_HOME/storages/workspace.json`（记录所有工作区绝对路径，按最近
+   使用排序）→ `$DSH_HOME/sessions/<编码路径>` 目录名 → 工作目录向上寻根 → 已发现项目的
+   同级目录与搜索目录（有深度/数量上限，不会拖慢插件加载）。
+2. **逐个试探**：每个候选用自己的 `ProjectSettings/McpUnitySettings.json`（端口）与
+   `Library/McpUnity/bridge-token`（凭据）握手；第一个被接受的即活跃项目，并固定下来
+   （Unity 换项目、旧 token 被拒时会自动重新识别）。
+3. **显式配置优先**：`MCP_UNITY_AUTH_TOKEN` / `MCP_UNITY_AUTH_TOKEN_PATH` 永远排在最前，
+   适合 CI 或临时排查。
 
-同一套顺序也决定 `unity_status` 的探测目标与 token，因此**诊断结果和真实连接永远一致**。
-`ProjectSettings/McpUnitySettings.json`（端口/超时）同样会从定位到的项目里读取并注入。
+因此**通常什么都不用配**：只要该项目在本机用 DSH 打开过（进入过工作区登记表），或工作目录
+本身/其同级目录里有 Unity 项目，就能自动识别。多项目机器同样无需按项目切换配置。
+
+只有在项目既不在登记表里、也不在常见位置时才需要显式指定：
 
 ```yaml
 # profile 的 cordis.patch.yml
 - id: unity-mcp
   config:
-    unityProjectPath: 'G:/Custom Projects/GamesProjects/UnityProjects/Tea'  # 推荐：一次配好，端口/token 全自动
-    # 或者只给 token（例如 Unity 项目不在本机常规位置）：
+    unityProjectPath: 'G:/Custom Projects/GamesProjects/UnityProjects/Tea'  # 高优先级提示（可选）
+    # unityProjectSearchPaths: ['G:/Custom Projects/GamesProjects']         # 额外搜索目录（可选）
     # env:
-    #   MCP_UNITY_AUTH_TOKEN_PATH: 'G:/.../Tea/Library/McpUnity/bridge-token'
+    #   MCP_UNITY_AUTH_TOKEN_PATH: 'G:/.../Tea/Library/McpUnity/bridge-token'  # 或者直接给 token
 ```
 
-若会话工作目录本身就是 Unity 项目（DSH 里把工作区设为项目根），则连 `unityProjectPath`
-都不用配。Unity 侧对应的配置可在编辑器菜单 **Tools > MCP Unity > Server Window** 查看：
-那里能看 token 文件路径、复制 token、重新生成 token（重新生成后必须重启 MCP 客户端）。
+Unity 侧的对应信息在编辑器菜单 **Tools > MCP Unity > Server Window**：能看到 token 文件
+路径、复制 token、重新生成 token（重新生成后必须重启 MCP 客户端）。
 
-在 DSH 之外快速自检（会打印 token 来源与握手结果）：
+在 DSH 之外快速自检（打印候选项目、逐个握手结果、识别出的活跃项目）：
 
 ```bash
+node scripts/bridge-check.mjs
 node scripts/bridge-check.mjs --project <Unity 项目根>
 ```
 
@@ -133,18 +143,20 @@ node scripts/bridge-check.mjs --project <Unity 项目根>
 ```yaml
 - id: unity-mcp
   config:
-    serverName: unity          # MCP 工具命名空间，默认 unity
-    unityProjectPath: ''       # Unity 项目根目录；留空则从工作目录向上自动探测
-    toolCallTimeoutMs: 60000   # 单次工具调用超时，默认 60 秒（必须 > 0）
-    probeTimeoutMs: 2000       # unity_status 探测/握手的超时，默认 2 秒（必须 ≥ 100）
-    env:                       # 传给服务端进程的额外环境变量
-      UNITY_PORT: '8090'       # 自定义 Unity 网桥端口（默认 8090，unity_status 同步探测此端口）
-      UNITY_HOST: 'localhost'  # 自定义网桥地址（默认 localhost）
-      # 认证相关（一般无需手写，unityProjectPath 会自动注入）：
-      # MCP_UNITY_AUTH_TOKEN: '<64 位十六进制 token>'
+    serverName: unity              # MCP 工具命名空间，默认 unity
+    unityProjectPath: ''           # 可选：把某个 Unity 项目提到最高优先级
+    unityProjectSearchPaths: []    # 可选：额外搜索目录（每个目录向下扫若干层找 Unity 项目）
+    toolCallTimeoutMs: 60000       # 单次工具调用超时，默认 60 秒（必须 > 0）
+    probeTimeoutMs: 2000           # unity_status 探测/握手的超时，默认 2 秒（必须 ≥ 100）
+    env:                           # 传给服务端进程的额外环境变量
+      UNITY_PORT: '8090'           # 自定义 Unity 网桥端口（默认 8090，unity_status 同步探测此端口）
+      UNITY_HOST: 'localhost'      # 自定义网桥地址（默认 localhost）
+      # 认证/项目来源（一般无需手写，插件会自动注入 MCP_UNITY_PROJECT_PATHS）：
+      # MCP_UNITY_AUTH_TOKEN: '<64 位十六进制 token>'          # 显式 token（优先级最高）
       # MCP_UNITY_AUTH_TOKEN_PATH: '<项目>/Library/McpUnity/bridge-token'
+      # MCP_UNITY_PROJECT_PATHS: '<项目A>;<项目B>'              # 候选项目列表（服务端逐个试探）
       # MCP_UNITY_SETTINGS_PATH: '<项目>/ProjectSettings/McpUnitySettings.json'
-    reconnect:                 # 重连策略（默认指数退避，1s 起、30s 封顶、10 次）
+    reconnect:                     # 重连策略（默认指数退避，1s 起、30s 封顶、10 次）
       enabled: true
       maxAttempts: 10
 ```
@@ -189,11 +201,19 @@ A：Unity 编辑器没有打开，或项目未安装网桥包。网桥跑在编�
 A：这是 **Unity 1.5+ 网桥的认证问题**（v1.3.0 已修）：端口在监听 ≠ 握手能通过。网桥会先接受 TCP 连接，再在 WebSocket 握手阶段校验项目 token，缺 token 就回 `401` 并断开；旧版客户端（≤ v1.2.0）从不发送 `Authorization` 头，于是每次握手都被拒、重连到上限，之后所有调用都表现为超时。升级到 **v1.3.0+** 即可，届时：
 
 - `unity_status` 会做真实握手，直接报 `handshake=unauthorized (HTTP 401)` 而不是「就绪」；
-- 插件会自动从探测到的 Unity 项目读取 token（见[认证与 Unity 项目定位](#认证与-unity-项目定位v13)）；项目不在工作目录上方时，配 `unityProjectPath` 或 `env.MCP_UNITY_AUTH_TOKEN_PATH`；
+- 插件会自动读取 Unity 项目的 token（见[认证与活跃项目识别](#认证与活跃项目识别v14)）；
 - 配置好之前，工具调用会立刻返回 `authentication_error`（含修复指引），不会再让你等超时。
 
+**Q：升级到 v1.3.0 后不再超时了，但报 `HTTP 401`，`unity_status` 显示 `authTokenSource: none`？**
+A：这是**第二个独立缺陷**（v1.4.0 已修）：认证代码已经会发 `Authorization`，但**取不到 token**——旧逻辑只会从 `process.cwd()` 向上找 Unity 项目，而 DSH 是常驻服务，进程工作目录不在任何 Unity 项目里，找不到就静默降级成「无 token」。v1.4.0 起改为**多来源候选 + token 握手识别活跃项目**（DSH 工作区登记表、会话目录、寻根、同级扫描），**无需按项目配置**，换项目也不用改配置。升级后 `unity_status` 会给出 `authTokenSource: Unity project (<路径>)` 与 `unityProjectPath`。
+
 **Q：`authentication_error`：Unity rejected the bridge authentication (HTTP 401)？**
-A：token 不对或过期。在 Unity 里打开 **Tools > MCP Unity > Server Window**，复制当前 token 填到插件配置，或直接配置该项目路径让插件自行读取；若你刚点过「Regenerate Authentication Token」，请**重启 MCP 客户端**（DSH 重启）让新 token 生效。
+A：新版（v1.4.0+）先确认「项目是否在候选里」：`unity_status` 的 `candidatesProbed` 与 `unityProjectPath` 会告诉你试过几个候选、识别出了哪个。若候选为空或都没被接受：
+
+- 在 Unity 里打开 **Tools > MCP Unity > Server Window**，确认 Authentication 为 `Ready`；
+- 若刚点过「Regenerate Authentication Token」，请**重启 MCP 客户端**（DSH 重启）让新 token 生效；
+- 项目不在候选里时，用 `unityProjectPath`（或 `env.MCP_UNITY_AUTH_TOKEN_PATH`）显式指定，
+  或先用 `node scripts/bridge-check.mjs` 查看发现结果。
 
 **Q：8090 端口被占用？**
 A：关闭占用进程，或在 Unity 网桥设置中更换端口后，通过上面 `cordis.patch.yml` 的 `env` 传 `UNITY_PORT` 对应端口（`unity_status` 会同步探测该端口；服务端亦会读 Unity 项目的 `ProjectSettings/McpUnitySettings.json`，以 mcp-unity 上游文档为准）。
@@ -214,10 +234,11 @@ dsh plugin --profile web allow-version dsh-unity-mcp@1.1.0 --dsh-version 0.2.0-r
 ## 开发与测试（Development & testing）
 
 ```bash
-# 单元/回归测试（零第三方依赖，node:test）
+# 单元/回归测试（node:test；36 个用例）
 node --test test/
 
-# 在 DSH 之外检查真实网桥：端口 + 认证握手（本机已开 Unity 时最直观）
+# 在 DSH 之外检查真实网桥：候选发现 + 逐个握手 + 识别活跃项目（本机已开 Unity 时最直观）
+node scripts/bridge-check.mjs
 node scripts/bridge-check.mjs --project <Unity 项目根>
 
 # 烟雾测试：对安装副本（或源码 vendor）发起真实 stdio 握手，列出注册的 Unity 工具
@@ -225,11 +246,19 @@ node scripts/smoke.mjs vendor   # 基于源码 vendor
 node scripts/smoke.mjs          # 基于 DSH 中的安装副本（先确认已安装本插件）
 ```
 
-`test/` 覆盖三类回归：vendored 配置解析的 token 优先级与失败语义、握手探测
-（必须发 `Authorization`、必须不发 `Origin`、401 不得判为就绪）、`apply()` 的
-工具契约与 lossless JSON 约束。仓库 CI（`.github/workflows/ci.yml`）会跑测试并校验
-package.json、bundle 补丁、入口语法、认证头是否仍然存在与打包内容。源码结构、升级内置
-服务端的方法见 [CONTRIBUTING.md](./CONTRIBUTING.md)，变更记录见 [CHANGELOG.md](./CHANGELOG.md)。
+`test/` 覆盖四类回归：
+
+- vendored 配置解析：token 优先级（`MCP_UNITY_AUTH_TOKEN` → `..._PATH` → 项目）、
+  显式配置写错时的失败语义、`MCP_UNITY_PROJECT_PATHS` 候选构造与去重；
+- 握手探测：必须发 `Authorization`、必须不发 `Origin`、401 不得判为就绪；
+- 项目发现：DSH 工作区登记表、`sessions/<编码路径>` 还原（含带连字符的真实路径）、
+  同级目录兜底、候选 env 注入、token 试探识别活跃项目；
+- 服务端连接层：第一个候选失败后换下一个候选、全部被拒 → 终态认证错误且不重连、
+  Unity 换项目后自动重新识别（后三个用例需要 `ws`，CI 会先把 `ws` 装进工作区）。
+
+仓库 CI（`.github/workflows/ci.yml`）会跑测试并校验 package.json、bundle 补丁、入口语法、
+「认证头 + 候选发现」是否仍然存在与打包内容。源码结构、升级内置服务端的方法见
+[CONTRIBUTING.md](./CONTRIBUTING.md)，变更记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ## 工具清单（部分）
 

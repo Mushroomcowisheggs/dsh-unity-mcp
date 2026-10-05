@@ -36,6 +36,7 @@ export declare class McpUnity {
     private host;
     private requestTimeout;
     private authToken;
+    private candidates;
     private connection;
     private pendingRequests;
     private clientName;

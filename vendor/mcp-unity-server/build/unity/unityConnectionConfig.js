@@ -1,4 +1,5 @@
 import { promises as fs } from 'fs';
+import { readFileSync } from 'fs';
 import path from 'path';
 import { McpUnityError, ErrorType } from '../utils/errors.js';
 const DEFAULT_PORT = 8090;
@@ -72,14 +73,128 @@ export async function resolveUnityConnectionConfig(logger, options = {}) {
     if (authentication.source !== NO_TOKEN_SOURCE) {
         logger.info(`Using Unity bridge authentication token (source: ${authentication.source})`);
     }
+    // Candidate projects (MCP_UNITY_PROJECT_PATHS) let the connection identify the
+    // live Unity project by trial: one bridge serves one project, so the first
+    // credentials the bridge accepts belong to the project the user is editing.
+    const candidates = resolveProjectCandidates(logger, environment, cwd, {
+        host: host.value,
+        port: port.value,
+        authToken: authentication.token,
+        authTokenSource: authentication.source,
+        settingsPath: settingsFile?.path
+    });
+    if (candidates.length > 1) {
+        logger.info(`Unity bridge will try ${candidates.length} candidate project targets in order: ` +
+            candidates.map(candidate => candidate.source).join(' -> '));
+    }
     return {
         host: host.value,
         port: port.value,
         requestTimeout: timeoutSeconds.value * 1000,
         authToken: authentication.token,
         authTokenSource: authentication.source,
-        settingsPath: settingsFile?.path
+        settingsPath: settingsFile?.path,
+        candidates
     };
+}
+/**
+ * Builds the ordered list of connection candidates.
+ *
+ * `MCP_UNITY_PROJECT_PATHS` holds candidate Unity project roots (in priority
+ * order) as discovered by the DSH plugin — the harness process runs outside any
+ * Unity project, so its cwd cannot be used to find one. Each candidate carries
+ * its own port (from that project's McpUnitySettings.json) and token (from that
+ * project's Library/McpUnity/bridge-token), which is what makes "one bridge per
+ * project, several projects on the machine" work without per-project config.
+ *
+ * The primary target resolved above is always tried first, so explicitly
+ * configured credentials keep winning.
+ */
+function resolveProjectCandidates(logger, environment, cwd, primary) {
+    const candidates = [];
+    const seen = new Set();
+    const add = (candidate) => {
+        if (!candidate.token && candidate.source === NO_TOKEN_SOURCE && !candidate.projectRoot) {
+            return;
+        }
+        const key = `${candidate.host}:${candidate.port}:${candidate.token ? candidate.token : 'anonymous'}`;
+        if (seen.has(key)) {
+            return;
+        }
+        seen.add(key);
+        candidates.push(candidate);
+    };
+    const primaryProjectRoot = primary.settingsPath
+        ? path.dirname(path.dirname(primary.settingsPath))
+        : undefined;
+    // Label honestly: an explicitly configured token is not "the project's token",
+    // even when the project path is also known.
+    const tokenConfiguredExplicitly = primary.authTokenSource === 'MCP_UNITY_AUTH_TOKEN' ||
+        primary.authTokenSource.startsWith('MCP_UNITY_AUTH_TOKEN_PATH');
+    add({
+        projectRoot: primaryProjectRoot,
+        host: primary.host,
+        port: primary.port,
+        authToken: primary.authToken,
+        token: primary.authToken,
+        source: tokenConfiguredExplicitly
+            ? `configured token (${primary.authTokenSource})`
+            : (primaryProjectRoot ?? 'primary target')
+    });
+    const configured = environment.MCP_UNITY_PROJECT_PATHS;
+    if (!configured || !configured.trim()) {
+        return candidates;
+    }
+    for (const entry of configured.split(path.delimiter)) {
+        const projectRoot = entry.trim();
+        if (!projectRoot) {
+            continue;
+        }
+        const resolvedRoot = path.resolve(cwd, projectRoot);
+        const settingsPath = path.join(resolvedRoot, SETTINGS_RELATIVE_PATH);
+        const settings = readSettingsFileSync(settingsPath);
+        const tokenPath = path.join(resolvedRoot, TOKEN_RELATIVE_PATH);
+        const token = readOptionalToken(tokenPath);
+        if (!settings && !token) {
+            continue;
+        }
+        add({
+            projectRoot: resolvedRoot,
+            host: normalizeString(settings?.Host) ?? primary.host,
+            port: parseInteger(settings?.Port) ?? primary.port,
+            authToken: token,
+            token,
+            source: token ? `${resolvedRoot}` : `${resolvedRoot} (no token file)`
+        });
+    }
+    if (candidates.length > 1) {
+        logger.info(`Candidate project targets: ${candidates.map(candidate => candidate.source).join(' -> ')}`);
+    }
+    return candidates;
+}
+function readSettingsFileSync(settingsPath) {
+    try {
+        const parsed = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : undefined;
+    }
+    catch {
+        return undefined;
+    }
+}
+/**
+ * Reads a candidate project token. A missing or malformed file simply means the
+ * candidate is tried unauthenticated (bridges predating authentication have no
+ * token file at all); it is never fatal, because another candidate may be the
+ * live project.
+ */
+function readOptionalToken(tokenPath) {
+    try {
+        const token = readFileSync(tokenPath, 'utf-8').trim();
+        return TOKEN_PATTERN.test(token) ? token : '';
+    }
+    catch {
+        return '';
+    }
 }
 /**
  * Resolves the bridge authentication token.

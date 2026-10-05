@@ -175,3 +175,105 @@ test("falls back to defaults without a Unity project and warns about the missing
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("turns MCP_UNITY_PROJECT_PATHS into ordered connection candidates", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "dsh-unity-candidates-"));
+  try {
+    const projectA = path.join(root, "ProjectA");
+    const projectB = path.join(root, "ProjectB");
+    await writeProject(projectA, { port: 8090, token: TOKEN });
+    await writeProject(projectB, { port: 8091, token: "f".repeat(64) });
+
+    const config = await resolveUnityConnectionConfig(silentLogger, {
+      cwd: root,
+      modulePath: path.join(root, "server.js"),
+      environment: {
+        MCP_UNITY_PROJECT_PATHS: [projectA, projectB, path.join(root, "NotAProject")].join(
+          path.delimiter
+        ),
+      },
+    });
+
+    // 主目标在前（这里是默认 localhost:8090），随后按顺序是各候选项目
+    assert.equal(config.candidates.length, 3);
+    assert.equal(config.candidates[0].source, "primary target");
+    assert.equal(config.candidates[1].projectRoot, projectA);
+    assert.equal(config.candidates[1].port, 8090);
+    assert.equal(config.candidates[1].authToken, TOKEN);
+    assert.equal(config.candidates[1].source, projectA);
+    assert.equal(config.candidates[2].projectRoot, projectB);
+    assert.equal(config.candidates[2].port, 8091);
+    assert.equal(config.candidates[2].authToken, "f".repeat(64));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("keeps an explicit token first and never duplicates a candidate target", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "dsh-unity-candidates-dedupe-"));
+  try {
+    const project = path.join(root, "ProjectA");
+    await writeProject(project, { port: 8090, token: TOKEN });
+    const explicit = "a".repeat(64);
+
+    const config = await resolveUnityConnectionConfig(silentLogger, {
+      cwd: root,
+      modulePath: path.join(root, "server.js"),
+      environment: {
+        MCP_UNITY_AUTH_TOKEN: explicit,
+        MCP_UNITY_SETTINGS_PATH: path.join(project, "ProjectSettings", "McpUnitySettings.json"),
+        MCP_UNITY_PROJECT_PATHS: project,
+      },
+    });
+
+    assert.equal(config.authToken, explicit);
+    assert.equal(config.authTokenSource, "MCP_UNITY_AUTH_TOKEN");
+    // 显式 token 优先，项目自己的 token 仍然作为备用候选（同一端点不同凭据）
+    assert.equal(config.candidates[0].authToken, explicit);
+    assert.equal(config.candidates[0].source, "configured token (MCP_UNITY_AUTH_TOKEN)");
+    assert.equal(config.candidates[1].authToken, TOKEN);
+    assert.equal(config.candidates[1].projectRoot, project);
+    // 同 host/port/token 只出现一次
+    const keys = config.candidates.map((c) => `${c.host}:${c.port}:${c.authToken}`);
+    assert.equal(new Set(keys).size, keys.length);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a candidate project without a token file is still tried (pre-auth bridge)", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "dsh-unity-candidates-notoken-"));
+  try {
+    const project = path.join(root, "Legacy");
+    await mkdir(path.join(project, "ProjectSettings"), { recursive: true });
+    await writeFile(
+      path.join(project, "ProjectSettings", "McpUnitySettings.json"),
+      JSON.stringify({ Port: 8095 })
+    );
+    const config = await resolveUnityConnectionConfig(silentLogger, {
+      cwd: root,
+      modulePath: path.join(root, "server.js"),
+      environment: { MCP_UNITY_PROJECT_PATHS: project },
+    });
+    const candidate = config.candidates.find((entry) => entry.projectRoot === project);
+    assert.ok(candidate, "the project must be a candidate");
+    assert.equal(candidate.authToken, "");
+    assert.equal(candidate.port, 8095);
+    assert.match(candidate.source, /no token file/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+/** 写一个最小 Unity 项目（settings + 可选 token）。 */
+async function writeProject(root, { port, token }) {
+  await mkdir(path.join(root, "ProjectSettings"), { recursive: true });
+  await writeFile(
+    path.join(root, "ProjectSettings", "McpUnitySettings.json"),
+    JSON.stringify({ Port: port, Host: "127.0.0.1" })
+  );
+  if (token) {
+    await mkdir(path.join(root, "Library", "McpUnity"), { recursive: true });
+    await writeFile(path.join(root, "Library", "McpUnity", "bridge-token"), token);
+  }
+}

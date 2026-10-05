@@ -27,17 +27,23 @@ dsh plugin --profile web install "file:./"
 ## 升级内置服务端（Upgrading the vendored server）
 
 > ⚠️ **vendored 目录里有本仓库的补丁，整体覆盖会丢**：`unityConnection.js`
-> 发送 `Authorization: Basic`、`unityConnectionConfig.js` 解析 `bridge-token`、
-> `utils/errors.js` 的 `AUTHENTICATION`、`mcpUnity.js` 的 `startupError`
-> 是从上游 1.5.0 移植的认证实现（见 CHANGELOG v1.3.0）。升级时要么选择已经包含
-> 这些实现的版本，要么把补丁重新应用一遍；CI 有一步专门校验它们还在
-> （`.github/workflows/ci.yml` → "vendored server still sends bridge authentication"）。
+> 发送 `Authorization: Basic`、按候选项目逐个试探（`tryNextCandidate` / 候选列表）、
+> `unityConnectionConfig.js` 解析 `bridge-token` 与 `MCP_UNITY_PROJECT_PATHS` 候选、
+> `utils/errors.js` 的 `AUTHENTICATION`、`mcpUnity.js` 的 `startupError` 与候选透传，
+> 是上游 1.5.0 认证实现 + 本仓库的「活跃项目识别」扩展（见 CHANGELOG v1.3.0 / v1.4.0）。
+> 升级时要么选择已经包含这些实现的版本，要么把补丁重新应用一遍；CI 有一步专门校验
+> 它们还在（`.github/workflows/ci.yml` → "vendored server still sends bridge
+> authentication and walks candidates"）。
+>
+> 另外 `lib/bridge-probe.js` 里的项目发现（DSH 工作区登记表 / sessions 目录名 /
+> 同级扫描）是**本仓库独有**的代码，不在 vendored 目录里，升级 vendored 不会影响它，
+> 但也别把它当成上游行为。
 
 1. 从上游 [CoderGamester/mcp-unity](https://github.com/CoderGamester/mcp-unity) 拉取最新构建到
    `vendor/mcp-unity-server/build/`，并同步 `vendor/mcp-unity-server/LICENSE.md`。
 2. 如有新运行时依赖，同步更新 `package.json` 的 `dependencies`。
-3. 确认认证补丁仍在（`node --test test/` + CI 的 vendored auth 步骤），
-   或在真实 Unity 上跑 `node scripts/bridge-check.mjs --project <项目根>` 确认握手成功。
+3. 确认补丁仍在（`node --test test/` + CI 的 vendored 步骤），
+   或在真实 Unity 上跑 `node scripts/bridge-check.mjs` 确认能识别活跃项目并握手成功。
 4. 在 CHANGELOG 记一笔，`npm run smoke:install` 验证工具清单。
 5. bump 版本并打新 Release。
 

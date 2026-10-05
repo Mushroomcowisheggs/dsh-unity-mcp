@@ -12,6 +12,9 @@ export class McpUnity {
     host = 'localhost';
     requestTimeout = 10000;
     authToken = '';
+    // Ordered candidate targets (one bridge serves one project). The connection
+    // walks them, so the live project is identified instead of configured.
+    candidates = [];
     connection = null;
     pendingRequests = new Map();
     clientName = '';
@@ -70,6 +73,7 @@ export class McpUnity {
                 port: this.port,
                 requestTimeout: this.requestTimeout,
                 authToken: this.authToken,
+                candidates: this.candidates,
                 clientName: this.clientName,
                 // Use defaults for reconnection and heartbeat from UnityConnection
             };
@@ -120,6 +124,7 @@ export class McpUnity {
         this.host = config.host;
         this.requestTimeout = config.requestTimeout;
         this.authToken = config.authToken;
+        this.candidates = config.candidates ?? [];
     }
     /**
      * Handle connection state changes
@@ -412,7 +417,9 @@ export class McpUnity {
             state: stats?.state ?? ConnectionState.Disconnected,
             pendingRequests: this.pendingRequests.size,
             reconnectAttempt: stats?.reconnectAttempt,
-            timeSinceLastPong: stats?.timeSinceLastPong
+            timeSinceLastPong: stats?.timeSinceLastPong,
+            // Which candidate project accepted the handshake (never the token).
+            identifiedProject: stats?.identifiedProject
         };
     }
 }
