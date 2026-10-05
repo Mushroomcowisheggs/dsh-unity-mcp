@@ -19,7 +19,7 @@ DSH 侧安装本插件、Unity 侧在项目里安装网桥包（`com.gamelovers.
 
 ## 三步上手（TL;DR）
 
-1. `dsh plugin --profile web add git+https://github.com/thyeff/dsh-unity-mcp.git`
+1. `dsh plugin --profile web add git+https://github.com/Mushroomcowisheggs/dsh-unity-mcp.git`
 2. Unity 项目的 `Packages/manifest.json` 加入网桥包（详见[安装](#安装)）
 3. 打开 Unity 编辑器，对 Agent 说：「查看当前场景层级」
 
@@ -30,6 +30,7 @@ DSH 侧安装本插件、Unity 侧在项目里安装网桥包（`com.gamelovers.
 - **网桥诊断（v1.1）**：本地工具 `unity_status` 先探后调——TCP 探测 Unity 网桥是否在线，Unity 未启动时 Agent 秒级知道，不再干等 60 秒超时
 - **配置校验（v1.1）**：超时等数值配置带 schema 校验，非法值在加载期直接报错，不会悄悄注销工具
 - **自动重连**：Unity 编辑器重启后自动恢复连接（指数退避，最多 10 次）
+- **兼容 DSH 0.2（v1.2）**：放宽 DSH 核心包的 peer 版本范围，0.1.x 与 0.2.0-rc.2 均免豁免直接加载
 - **中文文档**：本 README 即完整使用说明
 
 工具命名空间为 `unity`，Agent 内调用形如 `mcp__unity__create_scene`、`mcp__unity__update_gameobject` 等；另有本地诊断工具 `unity_status`（不带 mcp__ 前缀）。
@@ -38,7 +39,7 @@ DSH 侧安装本插件、Unity 侧在项目里安装网桥包（`com.gamelovers.
 
 | 组件 | 要求 |
 |------|------|
-| DeepSeek Harness | DSH Desktop 或 DSH CLI（核心包 0.1.1-rc.2 及以上） |
+| DeepSeek Harness | DSH Desktop 或 DSH CLI（核心包 `>=0.1.1-rc.2 <=0.2.0-rc.2`，即 0.1.1-rc.2 起至当前最新版 0.2.0-rc.2） |
 | Unity | 2022.3 及以上（推荐 Unity 6） |
 | Node.js | 无需单独安装（使用 Harness 自带运行时） |
 
@@ -47,10 +48,15 @@ DSH 侧安装本插件、Unity 侧在项目里安装网桥包（`com.gamelovers.
 ### 第 1 步：安装 DSH 插件
 
 ```bash
-dsh plugin --profile web add git+https://github.com/thyeff/dsh-unity-mcp.git
+dsh plugin --profile web add git+https://github.com/Mushroomcowisheggs/dsh-unity-mcp.git
 ```
 
 或在 DSH 网页的插件市场（若已收录）中搜索 `dsh-unity-mcp` 安装。
+
+> **一份构建同时兼容旧版与当前版**：v1.1.0 的 peer 写成 `^0.1.1-rc.2`，而 semver 的 caret 在 0.x 上只解析为 `>=0.1.1-rc.2 <0.2.0-0`，
+> 永远进不了 `0.2.0-rc.2`，因此 DSH 会以 `incompatible-version` 拒绝加载（提示可用 `dsh plugin allow-version` 授予豁免）。
+> v1.2.0 改为 `>=0.1.1-rc.2 <=0.2.0-rc.2`：**从 0.1.1-rc.2 一直到当前最新版 0.2.0-rc.2 都能加载，无需任何版本豁免**。
+> 上界用包含式 `<=0.2.0-rc.2` 而不是开放的 `<0.3.0-0` —— 后者会把已发布的 `0.2.1-alpha.1` 一并放行，等于替还没验证的新版背书。
 
 ### 第 2 步：在 Unity 项目中安装网桥包
 
@@ -138,6 +144,13 @@ A：让 Agent 调用 `mcp__unity__get_scenes_hierarchy`；若返回了真实的�
 **Q：与手动配置 `@deepseek-ai/dsh-mcp-client` 有何区别？**
 A：效果相同。区别在于本插件内置服务端与默认配置，免去手写 patch；**注意不要同时保留手动配置的同名 `serverName`（unity）条目，否则插件加载会报命名空间冲突**——二选一即可。
 
+**Q：加载时报 `skipping profile bundle "dsh-unity-mcp"` 或 `incompatible-version`？**
+A：这是 peer 声明的版本与运行时不匹配，**不是代码坏了**。v1.1.0 及更早写作 `^0.1.1-rc.2`，在 0.2.x 运行时上会被拒绝；请升级到 v1.2.0 及以上（支持范围 `>=0.1.1-rc.2 <=0.2.0-rc.2`）。若你的 DSH 比 0.2.0-rc.2 更新，插件会主动拒绝加载 —— 这时请提 issue，而不是硬开豁免。若暂时无法升级，可对**确切版本对**授予豁免（会破坏应用或损坏数据，不推荐）：
+
+```bash
+dsh plugin --profile web allow-version dsh-unity-mcp@1.1.0 --dsh-version 0.2.0-rc.2 --accept-risk
+```
+
 ## 开发与测试（Development & testing）
 
 仓库自带烟雾测试：对安装副本（或源码 vendor）发起真实 stdio 握手，列出注册的 Unity 工具，用于快速验证服务端可用性与工具完整性。
@@ -173,3 +186,4 @@ node scripts/smoke.mjs
 
 - [CoderGamester/mcp-unity](https://github.com/CoderGamester/mcp-unity) — 本插件封装的核心
 - [DeepSeek Harness](https://github.com/anywhere-labs/deepseek-harness-desktop) — 插件宿主
+- [thyeff/dsh-unity-mcp](https://github.com/thyeff/dsh-unity-mcp) — 上游仓库；本仓库为其 fork，新增 DSH 0.2.x 兼容（v1.2.0）

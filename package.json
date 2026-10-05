@@ -1,6 +1,6 @@
 {
   "name": "dsh-unity-mcp",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "DeepSeek Harness 插件：一键接入 mcp-unity，让 Agent 直接操控 Unity 编辑器进行游戏开发（场景/物体/材质/测试等 30+ 工具，附带 unity_status 网桥诊断）",
   "main": "lib/index.js",
   "type": "module",
@@ -23,7 +23,7 @@
     }
   },
   "dependencies": {
-    "@deepseek-ai/dsh-mcp-client": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-mcp-client": ">=0.1.1-rc.2 <=0.2.0-rc.2",
     "@modelcontextprotocol/ext-apps": "^1.0.0",
     "@modelcontextprotocol/sdk": "^1.7.0",
     "axios": "^1.8.4",
@@ -36,7 +36,7 @@
     "zod-to-json-schema": "^3.24.3"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-tools": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-tools": ">=0.1.1-rc.2 <=0.2.0-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "keywords": [
