@@ -19,8 +19,34 @@ jobs:
         run: |
           node -e "const p=require('./package.json'); if(!p.name||!p.main||!p.license) process.exit(1); if(p.dsh?.bundle?.patch !== './cordis.patch.yml') process.exit(1); console.log('package.json OK')"
 
-      - name: lib entry is valid ESM
-        run: node --check lib/index.js
+      - name: lib and script entries are valid ESM
+        run: |
+          node --check lib/index.js
+          node --check lib/bridge-probe.js
+          node --check scripts/bridge-check.mjs
+
+      - name: install ws into the workspace (vendored connection tests import it)
+        run: |
+          npm install --prefix "$RUNNER_TEMP/ws-deps" --no-audit --no-fund "ws@^8"
+          mkdir -p node_modules
+          cp -R "$RUNNER_TEMP/ws-deps/node_modules/ws" node_modules/
+
+      - name: unit and regression tests
+        run: node --test test/
+
+      - name: vendored server still sends bridge authentication and walks candidates
+        run: |
+          node -e "
+          const fs=require('fs');
+          const c=fs.readFileSync('vendor/mcp-unity-server/build/unity/unityConnection.js','utf8');
+          if(!/Authorization/.test(c)) { console.error('missing Authorization header'); process.exit(1); }
+          if(!/tryNextCandidate/.test(c)) { console.error('missing candidate sweep'); process.exit(1); }
+          const g=fs.readFileSync('vendor/mcp-unity-server/build/unity/unityConnectionConfig.js','utf8');
+          if(!/bridge-token/.test(g)) { console.error('missing bridge token discovery'); process.exit(1); }
+          if(!/MCP_UNITY_PROJECT_PATHS/.test(g)) { console.error('missing candidate project paths'); process.exit(1); }
+          const p=fs.readFileSync('lib/bridge-probe.js','utf8');
+          if(!/storages/.test(p) || !/sessions/.test(p)) { console.error('missing DSH workspace discovery'); process.exit(1); }
+          console.log('vendored auth + candidate discovery OK')"
 
       - name: bundle patch references the entry
         run: |

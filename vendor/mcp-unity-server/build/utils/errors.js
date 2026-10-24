@@ -1,6 +1,7 @@
 export var ErrorType;
 (function (ErrorType) {
     ErrorType["CONNECTION"] = "connection_error";
+    ErrorType["AUTHENTICATION"] = "authentication_error";
     ErrorType["TOOL_EXECUTION"] = "tool_execution_error";
     ErrorType["RESOURCE_FETCH"] = "resource_fetch_error";
     ErrorType["VALIDATION"] = "validation_error";

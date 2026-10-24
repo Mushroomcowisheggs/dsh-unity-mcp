@@ -35,9 +35,12 @@ export declare class McpUnity {
     private port;
     private host;
     private requestTimeout;
+    private authToken;
+    private candidates;
     private connection;
     private pendingRequests;
     private clientName;
+    private startupError;
     private stateListeners;
     private commandQueue;
     private queueingEnabled;
